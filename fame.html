@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Song Recognition Practice</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@latest/dist/tailwind.min.css" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body class="bg-gray-100 p-8">
+
+    <div x-data="songApp()" class="max-w-xl mx-auto">
+        <div>
+            <h1 class="text-2xl font-bold mb-4">Song Recognition Practice</h1>
+
+            <div x-show="mode === 'add'">
+                <textarea x-model="newSongIds" class="w-full p-2 border border-gray-300"
+                    placeholder="Paste song IDs here, separated by commas"></textarea>
+                <button @click="addSongs()" class="px-4 py-2 bg-blue-500 text-white rounded mt-2">Add Songs</button>
+            </div>
+
+            <div x-show="mode === 'practice'">
+                <div x-show="currentSongId">
+                    <iframe x-bind:src="songUrl" class="w-full h-64" style="display: none;" x-ref="iframe"></iframe>
+                    <button @click="toggleIframeVisibility()"
+                        class="px-4 py-2 bg-blue-500 text-white rounded mt-2">Toggle Visibility</button>
+                    <div class="flex space-x-2 mt-4">
+                        <button @click="reviewSong(true)" class="px-4 py-2 bg-green-500 text-white rounded">Knew the
+                            Song</button>
+                        <button @click="reviewSong(false)" class="px-4 py-2 bg-red-500 text-white rounded">Did Not
+                            Know</button>
+                    </div>
+                </div>
+                <div x-show="!currentSongId">
+                    <p>No songs due for review. Add more songs or come back later!</p>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <button @click="mode = 'add'" class="px-4 py-2 bg-gray-300 text-black rounded">Add Songs Mode</button>
+                <button @click="mode = 'practice'; loadNextSong()"
+                    class="px-4 py-2 bg-gray-300 text-black rounded">Practice Songs Mode</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function songApp() {
+            return {
+                mode: 'add', // 'add' or 'practice'
+                newSongIds: '',
+                currentSongId: null,
+                songHost: 'https://invidious.lunar.icu/embed/',
+
+                addSongs() {
+                    const ids = this.newSongIds.split('\n').map(id => id.trim());
+                    const songs = this.getSongs();
+                    let updated = false;
+
+                    ids.forEach(id => {
+                        if (!songs[id]) {
+                            songs[id] = {nextReview: Date.now()};
+                            updated = true;
+                        }
+                    });
+
+                    if (updated) {
+                        localStorage.setItem('songs', JSON.stringify(songs));
+                    }
+
+                    this.newSongIds = ''; // Clear input
+                },
+
+                loadNextSong() {
+                    const songs = this.getSongs();
+                    const now = Date.now();
+                    const nextSongId = Object.keys(songs).find(id => songs[id].nextReview <= now);
+
+                    if (nextSongId) {
+                        this.currentSongId = nextSongId;
+                        this.$refs.iframe.style.display = 'none'; // Hide iframe initially
+                    } else {
+                        this.currentSongId = null;
+                    }
+                },
+
+                reviewSong(knewIt) {
+                    const songs = this.getSongs();
+                    if (this.currentSongId && songs[this.currentSongId]) {
+                        // Set a base interval (e.g., 1 day)
+                        const baseInterval = 86400000; // 24 hours in milliseconds
+                        let interval;
+
+                        if (knewIt) {
+                            // If the song was known, double the interval from the last review, or use the base interval if it's the first review
+                            const lastInterval = songs[this.currentSongId].nextReview > Date.now() ? songs[this.currentSongId].nextReview - Date.now() : baseInterval;
+                            interval = lastInterval * 2;
+                        } else {
+                            // If the song was not known, reset to review in a day
+                            interval = baseInterval;
+                        }
+
+                        songs[this.currentSongId].nextReview = Date.now() + interval;
+
+                        localStorage.setItem('songs', JSON.stringify(songs));
+                        this.loadNextSong(); // Load next song
+                    }
+                },
+
+                toggleIframeVisibility() {
+                    const iframe = this.$refs.iframe;
+                    iframe.style.display = iframe.style.display === 'none' ? '' : 'none';
+                },
+
+                getSongs() {
+                    return JSON.parse(localStorage.getItem('songs')) || {};
+                },
+
+                get songUrl() {
+                    return this.songHost + this.currentSongId + '?listen=true&autoplay=true';
+                }
+            };
+        }
+    </script>
+
+</body>
+
+</html>
